@@ -6,19 +6,24 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.TextComponent;
+import net.minecraft.network.chat.style.Style;
 import net.minecraft.server.level.ServerPlayer;
 import su.gamepoint.pocky.inv.data.InventoryData;
 import su.gamepoint.pocky.inv.io.JsonFileHandler;
 
 import java.io.File;
+import java.util.Arrays;
+import java.util.Comparator;
 
 public class InventoryCommand {
 
     private static final InventoryCommand command = new InventoryCommand();
 
     public static void register(CommandDispatcher<CommandSourceStack> commandDispatcher) {
-
         commandDispatcher.register(Commands.literal("inventory")
                 .requires(cs -> cs.hasPermission(2))
                 .then(Commands.literal("set")
@@ -43,11 +48,9 @@ public class InventoryCommand {
                         )
                 )
         );
-
     }
 
     public int setInventory(CommandSourceStack source, ServerPlayer target, String date) throws CommandSyntaxException {
-
         InventoryData invData = JsonFileHandler.load("inventory/" + target.getUUID() + "/", date, InventoryData.class);
 
         if (invData == null) {
@@ -67,22 +70,39 @@ public class InventoryCommand {
     }
 
     public int list(CommandSourceStack source, ServerPlayer target, String approximateName) throws CommandSyntaxException {
-
         File folder = new File("InventoryLog/inventory/" + target.getUUID() + "/");
         File[] listOfFiles = folder.listFiles();
 
-
         source.getPlayerOrException()
                 .displayClientMessage(new TextComponent("§aHere is your list of files:"), false);
+
+        if (listOfFiles == null || listOfFiles.length == 0) {
+            source.getPlayerOrException().displayClientMessage(
+                    new TextComponent("§cOops! No file was found."),
+                    false
+            );
+            return 0;
+        }
+
+        Arrays.sort(listOfFiles, Comparator.comparing(File::getName)); // sort oldest -> newest
 
         boolean isFound = false;
 
         for (File file : listOfFiles) {
             if (file.isFile() && file.getName().startsWith(approximateName)) {
                 isFound = true;
-                source.getPlayerOrException()
-                        .displayClientMessage(new TextComponent("§3" + file.getName()
-                                .replace(".json", "")), false);
+                String filename = file.getName().replace(".json", "");
+
+                TextComponent fileNameText = new TextComponent("§3" + filename + " ");
+                TextComponent viewButton = new TextComponent("§6[View]");
+                viewButton.setStyle(Style.EMPTY
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,
+                                "/inventory set " + target.getName().getString() + " " + filename))
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                                new TextComponent("§7Click to load this inventory")))
+                );
+
+                source.getPlayerOrException().sendSystemMessage(fileNameText.append(viewButton));
             }
         }
 
